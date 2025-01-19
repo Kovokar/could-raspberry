@@ -1,0 +1,101 @@
+import network
+import socket
+import time
+from machine import Pin
+
+led = Pin(15, Pin.OUT)
+
+ssid = ''
+password = ''
+
+wlan = network.WLAN(network.STA_IF)
+wlan.active(True)
+wlan.connect(ssid, password)
+
+html = """
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fato sobre Gatos</title>
+</head>
+<body>
+    <h1>Fato Aleatório sobre Gatos</h1>
+    <button id="carregar-fato">Carregar Fato</button>
+    <p id="fato"></p>
+
+    <script>
+        // Função para buscar o fato sobre gatos da API
+        function carregarFato() {
+            const url = 'https://catfact.ninja/fact'; // Endereço da API
+
+            // Realizando a chamada fetch para a API
+            fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erro na resposta da API');
+                    }
+                    return response.json(); // Converte a resposta para JSON
+                })
+                .then(data => {
+                    // Exibe o fato sobre gatos na tela
+                    document.getElementById('fato').textContent = data.fact;
+                })
+                .catch(error => {
+                    // Trata erros caso haja algum problema na requisição
+                    document.getElementById('fato').textContent = 'Ocorreu um erro ao carregar o fato.';
+                    console.error('Erro:', error);
+                });
+        }
+
+        // Adiciona um evento ao botão para carregar o fato ao clicar
+        document.getElementById('carregar-fato').addEventListener('click', carregarFato);
+    </script>
+</body>
+</html>
+"""
+
+max_wait = 10
+while max_wait > 0:
+    if wlan.status() < 0 or wlan.status() >= 3:
+        break
+    max_wait -= 1
+    print('waiting for connection...')
+    time.sleep(1)
+
+if wlan.status() != 3:
+    raise RuntimeError('network connection failed')
+else:
+    print('connected')
+    status = wlan.ifconfig()
+    print('ip = ' + status[0])
+
+addr = socket.getaddrinfo('0.0.0.0', 83)[0][-1]
+
+s = socket.socket()
+s.bind(addr)
+s.listen(1)
+
+print('listening on', addr)
+
+# Listen for connections
+while True:
+    try:
+        cl, addr = s.accept()
+        print('client connected from', addr)
+        request = cl.recv(1024)
+        print(request)
+
+        response = html
+
+        cl.send('HTTP/1.0 200 OK\r\nContent-type: text/html\r\n\r\n')
+        cl.send(response)
+        cl.close()
+
+    except OSError as e:
+        cl.close()
+        print('connection closed')
+
+
+
